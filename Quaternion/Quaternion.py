@@ -119,9 +119,11 @@ class Quat(object):
                 self._set_transform(attitude)
             elif attitude.shape == (3,):
                 self._set_equatorial(attitude)
+            elif attitude.shape == (2,):
+                self._set_latlon(attitude)
             else:
                 raise TypeError(
-                    "attitude is not one of possible types (3 or 4 elements, Quat, or 3x3 matrix)")
+                    "attitude is not one of possible types (2, 3, or 4 elements, Quat, or 3x3 matrix)")
 
     def _set_q(self, q):
         """
@@ -197,6 +199,9 @@ class Quat(object):
     def _get_roll(self):
         """Retrieve Roll term from equatorial system in degrees"""
         return self.equatorial[2]
+
+    def _set_latlon(self, latlon):
+        self._q = self._latlontoquat(latlon)
 
     ra = property(_get_ra)
     dec = property(_get_dec)
@@ -501,6 +506,42 @@ class Quat(object):
             q2 = Quat(q2)
         return self.inv() * q2
 
+    def _get_angle_axis(self):
+        lim = 1e-12
+        norm = np.linalg.norm(self.q)
+        if norm < lim:
+            angle = 0
+            axis = [0, 0, 0]
+        else:
+            rnorm = 1.0 / norm
+            angle = acos(max(-1, min(1, rnorm * self.q[3])));
+            sangle = sin(angle)
+            if sangle < lim:
+                axis = [0, 0, 0]
+            else:
+                axis = (rnorm / sangle) * np.array(self.q[0:3])
+
+            angle *= 2
+
+        return (angle, axis)
+
+    def _latlontoquat(self, latlon):
+        q = np.zeros(4)
+
+        lon = latlon[1] * (pi / 180.)
+        lat = latlon[0] * (pi / 180.)
+        zd2 = 0.5 * lon
+        yd2 = -0.25 * pi - 0.5 * lat
+        Szd2 = sin(zd2)
+        Syd2 = sin(yd2)
+        Czd2 = cos(zd2)
+        Cyd2 = cos(yd2)
+        q[0] = -Szd2 * Syd2
+        q[1] = Czd2 * Syd2
+        q[2] = Szd2 * Cyd2
+        q[3] = Czd2 * Cyd2
+
+        return q
 
 def normalize(array):
     """
